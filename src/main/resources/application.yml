@@ -68,6 +68,9 @@ logging:
     name: logs/zomato-clone.log
 
 management:
+  health:
+    elasticsearch:
+      enabled: false
   endpoints:
     web:
       exposure:
