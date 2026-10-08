@@ -129,7 +129,7 @@ function logout() {
 
 async function fetchRestaurants() {
     const grid = document.getElementById('restaurants-grid');
-    grid.innerHTML = '<div class="text-center py-4" style="grid-column: 1/-1;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p>Loading fresh restaurants...</p></div>';
+    grid.innerHTML = '<div class="text-center py-4" style="grid-column: 1/-1;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p>Loading real restaurants...</p></div>';
 
     try {
         const response = await fetch(`${API_BASE}/api/restaurants/public/all`);
@@ -137,18 +137,21 @@ async function fetchRestaurants() {
             const data = await response.json();
             if (data && data.length > 0) {
                 state.restaurants = data;
-            } else {
-                state.restaurants = getMockRestaurants();
+                applyFiltersAndRender();
+                return;
             }
-        } else {
-            state.restaurants = getMockRestaurants();
         }
     } catch (error) {
-        console.warn('Backend unavailable or network error. Using sample restaurants for demonstration.', error);
-        state.restaurants = getMockRestaurants();
+        console.warn('Backend unavailable or network error:', error);
     }
 
+    state.restaurants = [];
     applyFiltersAndRender();
+
+    // Auto-discover real nearby restaurants if database is currently empty
+    if (navigator.geolocation && !state.userCoords) {
+        discoverRealNearbyRestaurants(true);
+    }
 }
 
 async function fetchRestaurantMenu(restaurantId) {
@@ -156,17 +159,14 @@ async function fetchRestaurantMenu(restaurantId) {
         const res = await fetch(`${API_BASE}/api/restaurants/public/${restaurantId}/menu`);
         if (res.ok) {
             const data = await res.json();
-            if (data && data.length > 0) {
-                state.menuItems = data;
-                renderRestaurantMenu();
-                return;
-            }
+            state.menuItems = data || [];
+            renderRestaurantMenu();
+            return;
         }
     } catch (err) {
-        console.warn('Using fallback menu for restaurant id', restaurantId);
+        console.warn('Error fetching restaurant menu:', err);
     }
-    // Fallback menu
-    state.menuItems = getMockMenuItems(restaurantId);
+    state.menuItems = [];
     renderRestaurantMenu();
 }
 
@@ -231,8 +231,19 @@ function renderRestaurantGrid(restaurants) {
     countLabel.textContent = `${restaurants.length} restaurants available`;
 
     if (!restaurants || restaurants.length === 0) {
-        grid.innerHTML = '';
-        emptyState.classList.remove('hidden');
+        grid.innerHTML = `
+            <div class="empty-restaurants-container text-center py-5" style="grid-column: 1/-1; padding: 48px 20px;">
+                <i class="fa-solid fa-location-crosshairs fa-3x" style="color:var(--primary); margin-bottom:16px;"></i>
+                <h3 style="font-weight:700; margin-bottom:10px;">Find Real Restaurants Near You</h3>
+                <p style="color:var(--text-muted); max-width:480px; margin:0 auto 20px auto; font-size:0.95rem;">
+                    Detect your current device location to discover actual live restaurants, cafes, and kitchens in your area.
+                </p>
+                <button type="button" class="btn btn-primary btn-lg" onclick="discoverRealNearbyRestaurants(false)">
+                    <i class="fa-solid fa-crosshairs"></i> Detect My Real Location
+                </button>
+            </div>
+        `;
+        if (emptyState) emptyState.classList.add('hidden');
         return;
     }
 
@@ -1015,14 +1026,14 @@ async function getAddressFromCoordinates(lat, lng) {
     return `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
 }
 
-async function discoverRealNearbyRestaurants() {
+async function discoverRealNearbyRestaurants(isSilent = false) {
     const locInput = document.getElementById('delivery-location');
     const detectBtn = document.getElementById('detect-location-btn');
 
     try {
         if (detectBtn) detectBtn.classList.add('loading');
         if (locInput) locInput.value = "Detecting your location...";
-        showToast("Accessing device GPS...", "info");
+        if (!isSilent) showToast("Accessing device GPS...", "info");
 
         // 1. Get exact GPS coordinates (100% Free)
         const coords = await getUserLocation();
@@ -1031,7 +1042,7 @@ async function discoverRealNearbyRestaurants() {
         // 2. Reverse geocode to city/locality name (100% Free)
         const address = await getAddressFromCoordinates(coords.lat, coords.lng);
         if (locInput) locInput.value = address;
-        showToast(`Located at ${address}. Syncing real local restaurants...`, "info");
+        if (!isSilent) showToast(`Located at ${address}. Syncing real local restaurants...`, "info");
 
         // 3. Call backend to auto-seed real restaurants from OpenStreetMap & return them
         const res = await fetch(`${API_BASE}/api/restaurants/public/sync-real-nearby?lat=${coords.lat}&lng=${coords.lng}&radiusMeters=5000`, {
@@ -1052,15 +1063,14 @@ async function discoverRealNearbyRestaurants() {
                         state.restaurants = fallbackData;
                     }
                 }
-                showToast(`Showing nearest available restaurants with delivery to ${address}.`, "info");
             }
-        } else {
-            showToast("Showing nearby kitchens.", "info");
         }
 
         applyFiltersAndRender();
     } catch (err) {
-        showToast(err.message || "Could not detect location", "error");
+        if (!isSilent) {
+            showToast(err.message || "Could not detect location", "error");
+        }
         if (locInput) locInput.value = "Downtown, City Center";
     } finally {
         if (detectBtn) detectBtn.classList.remove('loading');
@@ -1217,110 +1227,4 @@ async function handleRegister(e) {
     }
 }
 
-// ==========================================================================
-// MOCK DATA FALLBACKS (Ensure UI is always rich and beautiful)
-// ==========================================================================
 
-function getMockRestaurants() {
-    return [
-        {
-            id: 1,
-            name: "Royal Biryani House",
-            description: "Authentic Dum Biryani, Kebabs & Mughlai Delicacies",
-            cuisineType: "Biryani, North Indian, Mughlai",
-            address: "Brigade Road, City Center",
-            rating: 4.6,
-            avgDeliveryTime: 25,
-            minOrderAmount: 149,
-            imageUrl: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500&auto=format&fit=crop&q=80",
-            open: true
-        },
-        {
-            id: 2,
-            name: "La Piazza Woodfired Pizza",
-            description: "Handcrafted artisan sourdough pizzas & fresh pasta",
-            cuisineType: "Pizza, Italian, Fast Food",
-            address: "Indiranagar 100ft Road",
-            rating: 4.5,
-            avgDeliveryTime: 30,
-            minOrderAmount: 199,
-            imageUrl: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&auto=format&fit=crop&q=80",
-            open: true
-        },
-        {
-            id: 3,
-            name: "The Burger Republic",
-            description: "Juicy smash burgers, crispy tenders and milkshakes",
-            cuisineType: "Burger, Fast Food, American",
-            address: "Koramangala 5th Block",
-            rating: 4.4,
-            avgDeliveryTime: 20,
-            minOrderAmount: 99,
-            imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&auto=format&fit=crop&q=80",
-            open: true
-        },
-        {
-            id: 4,
-            name: "Golden Dragon Wok",
-            description: "Traditional Dim Sums, Hakka Noodles and Sichuan Gravies",
-            cuisineType: "Chinese, Asian, Momos",
-            address: "MG Road Metro Station Area",
-            rating: 4.3,
-            avgDeliveryTime: 35,
-            minOrderAmount: 150,
-            imageUrl: "https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=500&auto=format&fit=crop&q=80",
-            open: true
-        },
-        {
-            id: 5,
-            name: "Shree Krishna Veg Pure",
-            description: "Pure vegetarian South Indian breakfast & North Indian Thalis",
-            cuisineType: "Pure Veg, South Indian, North Indian",
-            address: "Jayanagar 4th Block",
-            rating: 4.7,
-            avgDeliveryTime: 20,
-            minOrderAmount: 80,
-            imageUrl: "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=500&auto=format&fit=crop&q=80",
-            open: true
-        },
-        {
-            id: 6,
-            name: "Sweet Tooth Desserts",
-            description: "Molten lava cakes, cheesecakes & gourmet churros",
-            cuisineType: "Dessert, Bakery, Waffles",
-            address: "HSR Layout Sector 3",
-            rating: 4.8,
-            avgDeliveryTime: 25,
-            minOrderAmount: 120,
-            imageUrl: "https://images.unsplash.com/photo-1551024601-bec78aea704b?w=500&auto=format&fit=crop&q=80",
-            open: true
-        }
-    ];
-}
-
-function getMockMenuItems(restaurantId) {
-    const menus = {
-        1: [
-            { id: 101, name: "Hyderabadi Chicken Dum Biryani", price: 299, veg: false, category: "Biryani", description: "Long grain basmati rice layered with succulent marinated chicken and aromatic saffron spices.", imageUrl: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=300&auto=format&fit=crop&q=80" },
-            { id: 102, name: "Paneer Tikka Biryani", price: 249, veg: true, category: "Biryani", description: "Clay oven roasted cottage cheese tossed with spiced basmati rice and mint dip.", imageUrl: "https://images.unsplash.com/photo-1645177628172-a94c1f96e6db?w=300&auto=format&fit=crop&q=80" },
-            { id: 103, name: "Murgh Malai Kebab (6 Pcs)", price: 260, veg: false, category: "Starters", description: "Tender chicken morsels marinated in fresh cream, cheese and mild green cardamom.", imageUrl: "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=300&auto=format&fit=crop&q=80" },
-            { id: 104, name: "Mirchi Ka Salan", price: 80, veg: true, category: "Sides", description: "Traditional peanut, sesame and green chili gravy served hot.", imageUrl: "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=300&auto=format&fit=crop&q=80" }
-        ],
-        2: [
-            { id: 201, name: "Margherita Basilico Pizza (10\")", price: 340, veg: true, category: "Pizza", description: "San Marzano tomato sauce, fresh mozzarella fior di latte and hand-picked fresh basil.", imageUrl: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=300&auto=format&fit=crop&q=80" },
-            { id: 202, name: "Smoked Pepperoni Feast (10\")", price: 420, veg: false, category: "Pizza", description: "Spicy Italian cured pepperoni, mozzarella cheese and chili-infused organic honey.", imageUrl: "https://images.unsplash.com/photo-1628840042765-356cda07504e?w=300&auto=format&fit=crop&q=80" },
-            { id: 203, name: "Creamy Truffle Penne", price: 380, veg: true, category: "Pasta", description: "Penne tossed in wild mushroom reduction and aromatic white truffle oil.", imageUrl: "https://images.unsplash.com/photo-1621996346565-e3d5d6281699?w=300&auto=format&fit=crop&q=80" }
-        ],
-        3: [
-            { id: 301, name: "Classic American Cheeseburger", price: 189, veg: false, category: "Burgers", description: "Double smashed patty, melted sharp cheddar, caramelized onions and secret house sauce.", imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop&q=80" },
-            { id: 302, name: "Crispy Peri Peri Veg Burger", price: 149, veg: true, category: "Burgers", description: "Crunchy herb potato and peas patty topped with spicy peri-peri garlic mayo.", imageUrl: "https://images.unsplash.com/photo-1550547660-d9450f859349?w=300&auto=format&fit=crop&q=80" },
-            { id: 303, name: "Loaded Cheese Fries", price: 129, veg: true, category: "Sides", description: "Golden crispy skin-on fries drowned in warm melted cheese sauce and jalapenos.", imageUrl: "https://images.unsplash.com/photo-1576107232684-1279f3908594?w=300&auto=format&fit=crop&q=80" }
-        ]
-    };
-
-    return menus[restaurantId] || [
-        { id: 901, name: "Chef's Special Gourmet Platter", price: 320, veg: true, category: "Specialties", description: "Handcrafted assortment of the chef's most celebrated recipes.", imageUrl: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&auto=format&fit=crop&q=80" },
-        { id: 902, name: "Crispy Spring Rolls", price: 160, veg: true, category: "Starters", description: "Crisp golden wrappers filled with wok-tossed farm fresh vegetables and sweet chili dip.", imageUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?w=300&auto=format&fit=crop&q=80" },
-        { id: 903, name: "Fresh Mint Mojito", price: 110, veg: true, category: "Beverages", description: "Refreshing blend of fresh garden mint, Persian lime, cane sugar and sparkling soda.", imageUrl: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=300&auto=format&fit=crop&q=80" }
-    ];
-}
