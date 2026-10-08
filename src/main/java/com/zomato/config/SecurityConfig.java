@@ -43,6 +43,7 @@ public class SecurityConfig {
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/", "/index.html", "/styles.css", "/app.js", "/favicon.ico", "/error").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/restaurants/public/**").permitAll()
                 .requestMatchers("/api/payments/webhook", "/api/payments/config").permitAll()
