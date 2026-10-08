@@ -40,17 +40,28 @@ public class GlobalExceptionHandler {
                 .body(new ApiError(LocalDateTime.now(), 402, "Payment Required", ex.getMessage(), req.getRequestURI()));
     }
 
+    @ExceptionHandler({org.springframework.security.core.AuthenticationException.class, org.springframework.security.authentication.BadCredentialsException.class, org.springframework.security.core.userdetails.UsernameNotFoundException.class})
+    public ResponseEntity<ApiError> handleAuthException(Exception ex, HttpServletRequest req) {
+        log.warn("Authentication failed: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ApiError(LocalDateTime.now(), 401, "Unauthorized", "Invalid email or password", req.getRequestURI()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest req) {
         Map<String, String> fieldErrors = new HashMap<>();
-        ex.getBindingResult().getAllErrors().forEach(error -> {
-            String fieldName = ((FieldError) error).getField();
-            fieldErrors.put(fieldName, error.getDefaultMessage());
-        });
+        String firstMessage = "Validation failed";
+        for (org.springframework.validation.ObjectError error : ex.getBindingResult().getAllErrors()) {
+            if (error instanceof FieldError fe) {
+                fieldErrors.put(fe.getField(), error.getDefaultMessage());
+                firstMessage = error.getDefaultMessage();
+            }
+        }
         Map<String, Object> response = new HashMap<>();
         response.put("timestamp", LocalDateTime.now());
         response.put("status", 400);
         response.put("error", "Validation Failed");
+        response.put("message", firstMessage);
         response.put("fields", fieldErrors);
         response.put("path", req.getRequestURI());
         return ResponseEntity.badRequest().body(response);
@@ -59,8 +70,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGeneral(Exception ex, HttpServletRequest req) {
         log.error("Unexpected error: {}", ex.getMessage(), ex);
+        String msg = ex.getMessage() != null && !ex.getMessage().isBlank() ? ex.getMessage() : "An unexpected error occurred";
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiError(LocalDateTime.now(), 500, "Internal Server Error",
-                        "An unexpected error occurred", req.getRequestURI()));
+                .body(new ApiError(LocalDateTime.now(), 500, "Internal Server Error", msg, req.getRequestURI()));
     }
 }

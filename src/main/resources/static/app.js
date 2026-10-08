@@ -980,7 +980,7 @@ async function handleLogin(e) {
             body: JSON.stringify({ email, password })
         });
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
 
         if (res.ok) {
             saveUserToStorage({
@@ -993,7 +993,8 @@ async function handleLogin(e) {
             closeAuthModal();
             showToast('Welcome back! Login successful.', 'success');
         } else {
-            showToast(data.message || 'Invalid email or password', 'error');
+            const errorMsg = data.message || data.error || (data.fields ? Object.values(data.fields)[0] : null) || 'Invalid email or password';
+            showToast(errorMsg, 'error');
         }
     } catch (err) {
         showToast('Login failed. Please verify credentials.', 'error');
@@ -1023,11 +1024,13 @@ async function handleRegister(e) {
                 name,
                 email,
                 password,
-                phone,
-                address,
+                phone: phone || null,
+                address: address || null,
                 role: 'CUSTOMER'
             })
         });
+
+        const data = await res.json().catch(() => ({}));
 
         if (res.ok) {
             showToast('Account created successfully! Please log in.', 'success');
@@ -1035,8 +1038,15 @@ async function handleRegister(e) {
             document.getElementById('login-email').value = email;
             document.getElementById('login-password').focus();
         } else {
-            const errData = await res.json().catch(() => ({}));
-            showToast(errData.message || 'Registration failed', 'error');
+            const errorMsg = data.message || data.error || (data.fields ? Object.values(data.fields)[0] : null) || 'Registration failed';
+            if (errorMsg.toLowerCase().includes('already registered')) {
+                showToast('Email already registered! Switched to Log In tab.', 'info');
+                switchAuthTab('login');
+                document.getElementById('login-email').value = email;
+                document.getElementById('login-password').focus();
+            } else {
+                showToast(errorMsg, 'error');
+            }
         }
     } catch (err) {
         showToast('Error registering account', 'error');

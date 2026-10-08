@@ -12,6 +12,7 @@ spring:
     show-sql: false
     properties:
       hibernate:
+        globally_quoted_identifiers: true
         format_sql: true
   cache:
     type: caffeine
