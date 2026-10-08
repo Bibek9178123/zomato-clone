@@ -1,0 +1,182 @@
+package com.zomato.service;
+
+import com.zomato.dto.request.MenuItemRequest;
+import com.zomato.dto.request.RestaurantRequest;
+import com.zomato.dto.response.MenuItemDTO;
+import com.zomato.dto.response.RestaurantDTO;
+import com.zomato.exception.BusinessException;
+import com.zomato.exception.ResourceNotFoundException;
+import com.zomato.model.MenuItem;
+import com.zomato.model.Restaurant;
+import com.zomato.model.User;
+import com.zomato.repository.MenuItemRepository;
+import com.zomato.repository.RestaurantRepository;
+import com.zomato.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class RestaurantService {
+
+    private final RestaurantRepository restaurantRepository;
+    private final MenuItemRepository menuItemRepository;
+    private final UserRepository userRepository;
+
+    @Cacheable(value = "restaurants", key = "#id")
+    public RestaurantDTO getRestaurantById(Long id) {
+        log.debug("Fetching restaurant from DB for id: {}", id);
+        Restaurant restaurant = restaurantRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found: " + id));
+        return mapToDTO(restaurant);
+    }
+
+    @Cacheable(value = "menuItems", key = "#restaurantId")
+    public List<MenuItemDTO> getMenuByRestaurantId(Long restaurantId) {
+        log.debug("Fetching menu from DB for restaurantId: {}", restaurantId);
+        return menuItemRepository.findByRestaurantIdAndIsAvailableTrue(restaurantId)
+                .stream().map(this::mapMenuItemToDTO).toList();
+    }
+
+    public List<RestaurantDTO> getAllRestaurants() {
+        return restaurantRepository.findAll().stream().map(this::mapToDTO).toList();
+    }
+
+    @Transactional
+    public RestaurantDTO createRestaurant(RestaurantRequest request, Long ownerId) {
+        User owner = userRepository.findById(ownerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Owner not found: " + ownerId));
+        Restaurant restaurant = Restaurant.builder()
+                .name(request.getName())
+                .description(request.getDescription())
+                .cuisineType(request.getCuisineType())
+                .address(request.getAddress())
+                .phone(request.getPhone())
+                .email(request.getEmail())
+                .latitude(request.getLatitude())
+                .longitude(request.getLongitude())
+                .minOrderAmount(request.getMinOrderAmount())
+                .avgDeliveryTime(request.getAvgDeliveryTime())
+                .owner(owner)
+                .isOpen(true)
+                .build();
+        Restaurant saved = restaurantRepository.save(restaurant);
+        log.info("Restaurant created: {} by owner {}", saved.getName(), ownerId);
+        return mapToDTO(saved);
+    }
+
+    @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "restaurants", key = "#id"),
+        @CacheEvict(value = "menuItems", key = "#id")
+    })
+    public RestaurantDTO updateRestaurant(Long id, RestaurantRequest request) {
+        Restaurant restaurant = restaurantRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found: " + id));
+        if (request.getName() != null) restaurant.setName(request.getName());
+        if (request.getDescription() != null) restaurant.setDescription(request.getDescription());
+        if (request.getCuisineType() != null) restaurant.setCuisineType(request.getCuisineType());
+        if (request.getAddress() != null) restaurant.setAddress(request.getAddress());
+        if (request.getPhone() != null) restaurant.setPhone(request.getPhone());
+        if (request.getMinOrderAmount() != null) restaurant.setMinOrderAmount(request.getMinOrderAmount());
+        if (request.getAvgDeliveryTime() != null) restaurant.setAvgDeliveryTime(request.getAvgDeliveryTime());
+        Restaurant updated = restaurantRepository.save(restaurant);
+        return mapToDTO(updated);
+    }
+
+    @Transactional
+    @CacheEvict(value = "restaurants", key = "#id")
+    public RestaurantDTO toggleRestaurantStatus(Long id) {
+        Restaurant restaurant = restaurantRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found: " + id));
+        restaurant.setOpen(!restaurant.isOpen());
+        Restaurant updated = restaurantRepository.save(restaurant);
+        log.info("Restaurant {} status toggled to: {}", id, updated.isOpen());
+        return mapToDTO(updated);
+    }
+
+    public List<RestaurantDTO> getNearbyRestaurants(double lat, double lng, double radiusKm) {
+        return restaurantRepository.findRestaurantsNearby(lat, lng, radiusKm)
+                .stream().map(this::mapToDTO).toList();
+    }
+
+    @Transactional
+    @CacheEvict(value = "menuItems", key = "#restaurantId")
+    public MenuItemDTO addMenuItem(Long restaurantId, MenuItemRequest request) {
+        Restaurant restaurant = restaurantRepository.findById(restaurantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found: " + restaurantId));
+        MenuItem menuItem = MenuItem.builder()
+                .name(request.getName())
+                .description(request.getDescription())
+                .price(request.getPrice())
+                .category(request.getCategory())
+                .isVeg(request.isVeg())
+                .imageUrl(request.getImageUrl())
+                .isAvailable(true)
+                .restaurant(restaurant)
+                .build();
+        MenuItem saved = menuItemRepository.save(menuItem);
+        log.info("Menu item added: {} to restaurant {}", saved.getName(), restaurantId);
+        return mapMenuItemToDTO(saved);
+    }
+
+    @Transactional
+    public MenuItemDTO updateMenuItem(Long menuItemId, MenuItemRequest request) {
+        MenuItem menuItem = menuItemRepository.findById(menuItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Menu item not found: " + menuItemId));
+        if (request.getName() != null) menuItem.setName(request.getName());
+        if (request.getDescription() != null) menuItem.setDescription(request.getDescription());
+        if (request.getPrice() != null) menuItem.setPrice(request.getPrice());
+        if (request.getCategory() != null) menuItem.setCategory(request.getCategory());
+        if (request.getImageUrl() != null) menuItem.setImageUrl(request.getImageUrl());
+        MenuItem updated = menuItemRepository.save(menuItem);
+        return mapMenuItemToDTO(updated);
+    }
+
+    @Transactional
+    public void deleteMenuItem(Long menuItemId) {
+        MenuItem menuItem = menuItemRepository.findById(menuItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Menu item not found: " + menuItemId));
+        menuItem.setAvailable(false);
+        menuItemRepository.save(menuItem);
+        log.info("Menu item soft-deleted: {}", menuItemId);
+    }
+
+    private RestaurantDTO mapToDTO(Restaurant r) {
+        RestaurantDTO dto = new RestaurantDTO();
+        dto.setId(r.getId());
+        dto.setName(r.getName());
+        dto.setDescription(r.getDescription());
+        dto.setCuisineType(r.getCuisineType());
+        dto.setAddress(r.getAddress());
+        dto.setRating(r.getRating());
+        dto.setOpen(r.isOpen());
+        dto.setAvgDeliveryTime(r.getAvgDeliveryTime());
+        dto.setMinOrderAmount(r.getMinOrderAmount());
+        dto.setImageUrl(r.getImageUrl());
+        dto.setLatitude(r.getLatitude());
+        dto.setLongitude(r.getLongitude());
+        return dto;
+    }
+
+    private MenuItemDTO mapMenuItemToDTO(MenuItem m) {
+        MenuItemDTO dto = new MenuItemDTO();
+        dto.setId(m.getId());
+        dto.setName(m.getName());
+        dto.setDescription(m.getDescription());
+        dto.setPrice(m.getPrice());
+        dto.setCategory(m.getCategory());
+        dto.setVeg(m.isVeg());
+        dto.setAvailable(m.isAvailable());
+        dto.setImageUrl(m.getImageUrl());
+        return dto;
+    }
+}
