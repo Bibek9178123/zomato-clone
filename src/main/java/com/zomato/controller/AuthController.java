@@ -8,6 +8,7 @@ import com.zomato.model.User;
 import com.zomato.repository.UserRepository;
 import com.zomato.security.JwtTokenProvider;
 import com.zomato.service.UserService;
+import com.zomato.exception.BusinessException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,12 +38,15 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+        String cleanEmail = request.getEmail() != null ? request.getEmail().trim() : "";
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+                new UsernamePasswordAuthenticationToken(cleanEmail, request.getPassword()));
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         String token = jwtTokenProvider.generateToken(userDetails);
-        User user = userRepository.findByEmail(request.getEmail()).orElseThrow();
-        log.info("User logged in: {}", request.getEmail());
+        User user = userRepository.findByEmail(cleanEmail.toLowerCase())
+                .or(() -> userRepository.findByEmail(cleanEmail))
+                .orElseThrow(() -> new BusinessException("User account not found"));
+        log.info("User logged in: {}", user.getEmail());
         return ResponseEntity.ok(AuthResponse.builder()
                 .token(token)
                 .userId(user.getId())

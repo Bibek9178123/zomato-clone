@@ -61,6 +61,7 @@ public class FirebaseAuthService {
                         .password(UUID.randomUUID().toString()) // Dummy password, auth is handled by Firebase
                         .role(UserRole.CUSTOMER)
                         .active(true)
+                        .enabled(true)
                         .build();
                 user = userRepository.save(user);
                 log.info("Registered new user via Firebase Auth: {}", user.getEmail());

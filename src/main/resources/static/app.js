@@ -1033,10 +1033,33 @@ async function handleRegister(e) {
         const data = await res.json().catch(() => ({}));
 
         if (res.ok) {
+            showToast('Account created! Logging you in...', 'success');
+            try {
+                const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const loginData = await loginRes.json().catch(() => ({}));
+                if (loginRes.ok) {
+                    saveUserToStorage({
+                        token: loginData.token,
+                        userId: loginData.userId,
+                        email: loginData.email,
+                        role: loginData.role,
+                        name: name || email.split('@')[0]
+                    });
+                    closeAuthModal();
+                    showToast(`Welcome to Zomato, ${name || email.split('@')[0]}!`, 'success');
+                    return;
+                }
+            } catch (loginErr) {
+                console.warn('Auto-login error after registration:', loginErr);
+            }
             showToast('Account created successfully! Please log in.', 'success');
             switchAuthTab('login');
             document.getElementById('login-email').value = email;
-            document.getElementById('login-password').focus();
+            document.getElementById('login-password').value = password;
         } else {
             const errorMsg = data.message || data.error || (data.fields ? Object.values(data.fields)[0] : null) || 'Registration failed';
             if (errorMsg.toLowerCase().includes('already registered')) {

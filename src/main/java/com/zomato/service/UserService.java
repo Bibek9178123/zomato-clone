@@ -30,28 +30,36 @@ public class UserService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = userRepository.findByEmail(email)
+        String cleanEmail = email != null ? email.trim().toLowerCase() : "";
+        User user = userRepository.findByEmail(cleanEmail)
+                .or(() -> userRepository.findByEmail(email))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
         return new org.springframework.security.core.userdetails.User(
                 user.getEmail(),
                 user.getPassword(),
+                user.isEnabled() && user.isActive(),
+                true,
+                true,
+                true,
                 List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
         );
     }
 
     @Transactional
     public UserDTO register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessException("Email already registered: " + request.getEmail());
+        String cleanEmail = request.getEmail().trim().toLowerCase();
+        if (userRepository.existsByEmail(cleanEmail) || userRepository.existsByEmail(request.getEmail())) {
+            throw new BusinessException("Email already registered: " + cleanEmail);
         }
         User user = User.builder()
-                .name(request.getName())
-                .email(request.getEmail())
+                .name(request.getName().trim())
+                .email(cleanEmail)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .phone(request.getPhone())
                 .role(request.getRole() != null ? request.getRole() : UserRole.CUSTOMER)
                 .address(request.getAddress())
                 .active(true)
+                .enabled(true)
                 .build();
         User saved = userRepository.save(user);
         log.info("User registered: {} with role {}", saved.getEmail(), saved.getRole());
