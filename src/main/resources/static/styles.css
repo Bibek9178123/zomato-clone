@@ -1879,3 +1879,46 @@ button, input, select, textarea {
         flex-direction: column;
     }
 }
+
+/* GPS Location Detect Button & Distance Badges */
+.detect-gps-btn {
+    background: transparent;
+    border: none;
+    color: var(--primary);
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
+.detect-gps-btn:hover {
+    background: rgba(226, 55, 68, 0.12);
+    transform: scale(1.15);
+}
+
+.detect-gps-btn.loading i {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.distance-badge {
+    background: #FFF0F1;
+    color: var(--primary);
+    font-weight: 700;
+    font-size: 0.76rem;
+    padding: 2px 7px;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid rgba(226, 55, 68, 0.2);
+}
+

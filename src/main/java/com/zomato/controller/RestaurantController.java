@@ -22,6 +22,7 @@ public class RestaurantController {
     private final RestaurantService restaurantService;
     private final SearchService searchService;
     private final UserRepository userRepository;
+    private final com.zomato.service.RealRestaurantService realRestaurantService;
 
     // ---- Public endpoints ----
 
@@ -46,6 +47,17 @@ public class RestaurantController {
             @RequestParam double lng,
             @RequestParam(defaultValue = "5.0") double radius) {
         return ResponseEntity.ok(restaurantService.getNearbyRestaurants(lat, lng, radius));
+    }
+
+    @PostMapping("/api/restaurants/public/sync-real-nearby")
+    public ResponseEntity<List<RestaurantDTO>> syncRealNearby(
+            @RequestParam double lat,
+            @RequestParam double lng,
+            @RequestParam(defaultValue = "5000") double radiusMeters) {
+        realRestaurantService.fetchAndSeedRealRestaurants(lat, lng, radiusMeters);
+        double radiusKm = radiusMeters / 1000.0;
+        List<RestaurantDTO> nearby = restaurantService.getNearbyRestaurants(lat, lng, radiusKm);
+        return ResponseEntity.ok(nearby);
     }
 
     @GetMapping("/api/restaurants/public/search")

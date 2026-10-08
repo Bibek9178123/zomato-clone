@@ -15,9 +15,15 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, Long> {
     List<Restaurant> findByCuisineTypeContainingIgnoreCase(String cuisineType);
 
     @Query(value = "SELECT * FROM restaurants r WHERE " +
-            "(6371 * acos(cos(radians(:lat)) * cos(radians(r.latitude)) * " +
+            "r.latitude IS NOT NULL AND r.longitude IS NOT NULL AND " +
+            "(6371 * acos(LEAST(1.0, GREATEST(-1.0, " +
+            "cos(radians(:lat)) * cos(radians(r.latitude)) * " +
             "cos(radians(r.longitude) - radians(:lng)) + " +
-            "sin(radians(:lat)) * sin(radians(r.latitude)))) < :radiusKm",
+            "sin(radians(:lat)) * sin(radians(r.latitude)))))) < :radiusKm " +
+            "ORDER BY (6371 * acos(LEAST(1.0, GREATEST(-1.0, " +
+            "cos(radians(:lat)) * cos(radians(r.latitude)) * " +
+            "cos(radians(r.longitude) - radians(:lng)) + " +
+            "sin(radians(:lat)) * sin(radians(r.latitude)))))) ASC",
             nativeQuery = true)
     List<Restaurant> findRestaurantsNearby(@Param("lat") double lat,
                                            @Param("lng") double lng,

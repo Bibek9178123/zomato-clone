@@ -17,4 +17,5 @@ public class RestaurantDTO {
     private String imageUrl;
     private Double latitude;
     private Double longitude;
+    private Double distanceKm;
 }

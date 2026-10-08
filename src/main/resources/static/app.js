@@ -21,6 +21,7 @@ const state = {
     stripe: null,
     cardElement: null,
     activeCategory: 'all',
+    userCoords: null,
     filters: {
         pureVeg: false,
         minRating: 0,
@@ -253,7 +254,10 @@ function renderRestaurantGrid(restaurants) {
                     </div>
                 </div>
                 <div class="card-cuisine">${r.cuisineType || 'North Indian, Fast Food, Snacks'}</div>
-                <div class="card-location"><i class="fa-solid fa-location-dot" style="font-size:0.75rem;"></i> ${r.address || 'Central City'}</div>
+                <div class="card-location">
+                    <span><i class="fa-solid fa-location-dot" style="font-size:0.75rem;"></i> ${r.address || 'Central City'}</span>
+                    ${r.distanceKm ? `<span class="distance-badge"><i class="fa-solid fa-location-arrow"></i> ${r.distanceKm} km</span>` : ''}
+                </div>
                 <div class="card-footer-row">
                     <span>Min: <strong>₹${r.minOrderAmount || 99}</strong></span>
                     <span class="text-green"><i class="fa-solid fa-shield-halved"></i> Safety Certified</span>
@@ -928,7 +932,141 @@ function setupEventListeners() {
         document.getElementById('order-success-modal').classList.add('hidden');
         openOrdersHistoryDrawer();
     });
+
+    // Initialize Free GPS Location Detection UI
+    setupLocationDetectionUI();
 }
+
+// ==========================================================================
+// REAL-TIME NEARBY RESTAURANTS (100% FREE VIA HTML5 GPS & OPENSTREETMAP)
+// ==========================================================================
+
+function setupLocationDetectionUI() {
+    const locPicker = document.querySelector('.location-picker');
+    const locInput = document.getElementById('delivery-location');
+
+    if (locPicker && !document.getElementById('detect-location-btn')) {
+        const detectBtn = document.createElement('button');
+        detectBtn.type = 'button';
+        detectBtn.id = 'detect-location-btn';
+        detectBtn.className = 'detect-gps-btn';
+        detectBtn.title = 'Detect your real-time nearby restaurants for free';
+        detectBtn.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
+        locPicker.appendChild(detectBtn);
+
+        detectBtn.addEventListener('click', discoverRealNearbyRestaurants);
+    }
+
+    if (locInput) {
+        locInput.style.cursor = 'pointer';
+        locInput.title = 'Click to detect real-time nearby restaurants';
+        locInput.addEventListener('click', () => {
+            if (!state.userCoords) {
+                discoverRealNearbyRestaurants();
+            }
+        });
+    }
+}
+
+function getUserLocation() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject(new Error("Geolocation is not supported by your browser"));
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                resolve({
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                    accuracy: position.coords.accuracy
+                });
+            },
+            (error) => {
+                let msg = "Location access was denied. Please allow location permissions in your browser.";
+                if (error.code === error.TIMEOUT) msg = "Location detection timed out.";
+                reject(new Error(msg));
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 60000
+            }
+        );
+    });
+}
+
+async function getAddressFromCoordinates(lat, lng) {
+    try {
+        const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`);
+        if (res.ok) {
+            const data = await res.json();
+            const locality = data.locality || data.city || data.principalSubdivision;
+            const city = data.city || data.principalSubdivision;
+            if (locality && city && locality !== city) {
+                return `${locality}, ${city}`;
+            }
+            return locality || city || "Near your location";
+        }
+    } catch (e) {
+        console.warn("Reverse geocode fallback", e);
+    }
+    return `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+}
+
+async function discoverRealNearbyRestaurants() {
+    const locInput = document.getElementById('delivery-location');
+    const detectBtn = document.getElementById('detect-location-btn');
+
+    try {
+        if (detectBtn) detectBtn.classList.add('loading');
+        if (locInput) locInput.value = "Detecting your location...";
+        showToast("Accessing device GPS...", "info");
+
+        // 1. Get exact GPS coordinates (100% Free)
+        const coords = await getUserLocation();
+        state.userCoords = coords;
+
+        // 2. Reverse geocode to city/locality name (100% Free)
+        const address = await getAddressFromCoordinates(coords.lat, coords.lng);
+        if (locInput) locInput.value = address;
+        showToast(`Located at ${address}. Syncing real local restaurants...`, "info");
+
+        // 3. Call backend to auto-seed real restaurants from OpenStreetMap & return them
+        const res = await fetch(`${API_BASE}/api/restaurants/public/sync-real-nearby?lat=${coords.lat}&lng=${coords.lng}&radiusMeters=5000`, {
+            method: 'POST'
+        });
+
+        if (res.ok) {
+            const realRestaurants = await res.json();
+            if (realRestaurants && realRestaurants.length > 0) {
+                state.restaurants = realRestaurants;
+                showToast(`Found ${realRestaurants.length} real restaurants in your neighborhood!`, "success");
+            } else {
+                // Fallback to existing nearby query
+                const nearbyRes = await fetch(`${API_BASE}/api/restaurants/public/nearby?lat=${coords.lat}&lng=${coords.lng}&radius=15`);
+                if (nearbyRes.ok) {
+                    const fallbackData = await nearbyRes.json();
+                    if (fallbackData && fallbackData.length > 0) {
+                        state.restaurants = fallbackData;
+                    }
+                }
+                showToast(`Showing nearest available restaurants with delivery to ${address}.`, "info");
+            }
+        } else {
+            showToast("Showing nearby kitchens.", "info");
+        }
+
+        applyFiltersAndRender();
+    } catch (err) {
+        showToast(err.message || "Could not detect location", "error");
+        if (locInput) locInput.value = "Downtown, City Center";
+    } finally {
+        if (detectBtn) detectBtn.classList.remove('loading');
+    }
+}
+
 
 // ==========================================================================
 // MODALS & DRAWERS
