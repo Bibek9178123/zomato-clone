@@ -34,7 +34,7 @@ server:
   port: ${PORT:8081}
 
 jwt:
-  secret: zomatoCloneSecretKeyForJWTTokenGenerationAndValidation2024MustBe256BitsLong
+  secret: ${JWT_SECRET:zomatoCloneSecretKeyForJWTTokenGenerationAndValidation2024MustBe256BitsLong}
   expiration: 86400000
 
 stripe:
@@ -45,7 +45,7 @@ stripe:
 
 google:
   maps:
-    api-key: ${GOOGLE_MAPS_API_KEY:YOUR_GOOGLE_MAPS_API_KEY}
+    api-key: ${GOOGLE_MAPS_API_KEY:AIzaSyBL6TVrtcHUZZkv6PD4uPEWZJw4iC0CsGg}
 
 app:
   rate-limit:
