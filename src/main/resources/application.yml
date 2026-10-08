@@ -38,6 +38,7 @@ jwt:
   expiration: 86400000
 
 stripe:
+  publishable-key: ${STRIPE_PUBLISHABLE_KEY:pk_test_51UOGbvEDOj3oB1kHMhH0rc1aYQURNdVmb49H5JhpDXnJ1PMArlsqh5LsblFXjOl7t6CSU6M3oY7JS2gdUYAs21RK00a52u1ASf}
   secret-key: ${STRIPE_SECRET_KEY:sk_test_YOUR_STRIPE_SECRET_KEY}
   webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_YOUR_WEBHOOK_SECRET}
   currency: inr

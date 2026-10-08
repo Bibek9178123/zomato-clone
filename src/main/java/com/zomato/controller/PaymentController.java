@@ -1,5 +1,6 @@
 package com.zomato.controller;
 
+import com.zomato.config.StripeConfig;
 import com.zomato.dto.request.PaymentRequest;
 import com.zomato.dto.response.PaymentResponse;
 import com.zomato.repository.UserRepository;
@@ -10,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/payments")
 @RequiredArgsConstructor
@@ -17,6 +20,15 @@ public class PaymentController {
 
     private final PaymentService paymentService;
     private final UserRepository userRepository;
+    private final StripeConfig stripeConfig;
+
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, String>> getStripeConfig() {
+        return ResponseEntity.ok(Map.of(
+                "publishableKey", stripeConfig.getPublishableKey() != null ? stripeConfig.getPublishableKey() : "",
+                "currency", stripeConfig.getCurrency() != null ? stripeConfig.getCurrency() : "inr"
+        ));
+    }
 
     @PostMapping("/create-intent")
     public ResponseEntity<PaymentResponse> createPaymentIntent(
