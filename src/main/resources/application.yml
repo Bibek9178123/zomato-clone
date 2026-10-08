@@ -45,7 +45,7 @@ stripe:
 
 google:
   maps:
-    api-key: YOUR_GOOGLE_MAPS_API_KEY
+    api-key: ${GOOGLE_MAPS_API_KEY:YOUR_GOOGLE_MAPS_API_KEY}
 
 app:
   rate-limit:
