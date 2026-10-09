@@ -204,10 +204,47 @@ function applyFiltersAndRender() {
 
     // Category filter
     if (state.activeCategory && state.activeCategory !== 'all') {
-        list = list.filter(r => 
-            (r.cuisineType && r.cuisineType.toLowerCase().includes(state.activeCategory.toLowerCase())) ||
-            (r.description && r.description.toLowerCase().includes(state.activeCategory.toLowerCase()))
-        );
+        const cat = state.activeCategory.toLowerCase();
+        list = list.filter(r => {
+            const cType = (r.cuisineType || '').toLowerCase();
+            const desc = (r.description || '').toLowerCase();
+            const name = (r.name || '').toLowerCase();
+
+            if (cat === 'rolls' || cat === 'roll') {
+                return cType.includes('roll') || desc.includes('roll') || name.includes('roll') || cType.includes('kebab') || cType.includes('fast food') || cType.includes('street');
+            }
+            if (cat === 'soups' || cat === 'soup') {
+                return cType.includes('soup') || desc.includes('soup') || cType.includes('chinese') || cType.includes('asian') || cType.includes('italian') || cType.includes('continental');
+            }
+            if (cat === 'momos' || cat === 'momo') {
+                return cType.includes('momo') || desc.includes('momo') || name.includes('momo') || cType.includes('chinese') || cType.includes('asian');
+            }
+            if (cat === 'tandoori') {
+                return cType.includes('tandoor') || desc.includes('tandoor') || cType.includes('kebab') || desc.includes('kebab') || cType.includes('barbeque') || cType.includes('biryani');
+            }
+            if (cat === 'chaat') {
+                return cType.includes('chaat') || desc.includes('chaat') || cType.includes('street') || cType.includes('mithai') || name.includes('haldiram') || name.includes('bikanervala');
+            }
+            if (cat === 'thalis' || cat === 'thali') {
+                return cType.includes('thali') || desc.includes('thali') || cType.includes('south indian') || cType.includes('north indian');
+            }
+            if (cat === 'south indian') {
+                return cType.includes('south') || desc.includes('south') || desc.includes('dosa') || name.includes('sagar') || name.includes('a2b');
+            }
+            if (cat === 'cafe') {
+                return cType.includes('cafe') || cType.includes('coffee') || desc.includes('coffee') || cType.includes('bakery') || name.includes('starbucks');
+            }
+            if (cat === 'dessert' || cat === 'desserts') {
+                return cType.includes('dessert') || cType.includes('ice cream') || cType.includes('waffle') || cType.includes('bakery') || cType.includes('sweet');
+            }
+            if (cat === 'burger' || cat === 'burgers') {
+                return cType.includes('burger') || desc.includes('burger') || name.includes('burger') || name.includes('mcdonald') || name.includes('kfc');
+            }
+            if (cat === 'chinese') {
+                return cType.includes('chinese') || cType.includes('asian') || cType.includes('momo') || cType.includes('noodle');
+            }
+            return cType.includes(cat) || desc.includes(cat) || name.includes(cat);
+        });
     }
 
     // Pure veg filter
