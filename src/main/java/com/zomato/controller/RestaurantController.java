@@ -55,9 +55,9 @@ public class RestaurantController {
             @RequestParam double lng,
             @RequestParam(defaultValue = "5000") double radiusMeters) {
         realRestaurantService.fetchAndSeedRealRestaurants(lat, lng, radiusMeters);
-        double radiusKm = Math.max(10.0, radiusMeters / 1000.0);
+        double radiusKm = Math.max(12.0, radiusMeters / 1000.0);
         List<RestaurantDTO> nearby = restaurantService.getNearbyRestaurants(lat, lng, radiusKm);
-        if (nearby.isEmpty()) {
+        if (nearby.size() < 15) {
             nearby = restaurantService.getAllRestaurants();
         }
         return ResponseEntity.ok(nearby);

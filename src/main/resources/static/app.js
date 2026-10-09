@@ -127,6 +127,21 @@ function logout() {
 // RESTAURANTS & MENU DATA
 // ==========================================================================
 
+function deduplicateRestaurantList(list) {
+    if (!Array.isArray(list)) return [];
+    const seen = new Set();
+    return list.filter(r => {
+        if (!r || !r.name) return false;
+        const norm = r.name.toLowerCase()
+            .replace(/\b(restaurant|hotel|cafe|dhaba|the|pizzeria|pizza|kitchen|express|sweets|bakers|bakery|bar|foods|food|court|center|point|corner|hub|house|delights|darbar|durbar|junction)\b/gi, '')
+            .replace(/[^a-z0-9]/g, '');
+        const key = norm.length > 2 ? norm : r.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 async function fetchRestaurants() {
     const grid = document.getElementById('restaurants-grid');
     grid.innerHTML = '<div class="text-center py-4" style="grid-column: 1/-1;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p>Loading real restaurants...</p></div>';
@@ -136,7 +151,7 @@ async function fetchRestaurants() {
         if (response.ok) {
             const data = await response.json();
             if (data && data.length > 0) {
-                state.restaurants = data;
+                state.restaurants = deduplicateRestaurantList(data);
                 applyFiltersAndRender();
                 return;
             }
@@ -1052,15 +1067,15 @@ async function discoverRealNearbyRestaurants(isSilent = false) {
         if (res.ok) {
             const realRestaurants = await res.json();
             if (realRestaurants && realRestaurants.length > 0) {
-                state.restaurants = realRestaurants;
-                showToast(`Found ${realRestaurants.length} real restaurants in your neighborhood!`, "success");
+                state.restaurants = deduplicateRestaurantList(realRestaurants);
+                showToast(`Found ${state.restaurants.length} real restaurants in your neighborhood!`, "success");
             } else {
-                // Fallback to existing nearby query
-                const nearbyRes = await fetch(`${API_BASE}/api/restaurants/public/nearby?lat=${coords.lat}&lng=${coords.lng}&radius=15`);
-                if (nearbyRes.ok) {
-                    const fallbackData = await nearbyRes.json();
+                // Fallback to all restaurants
+                const allRes = await fetch(`${API_BASE}/api/restaurants/public/all`);
+                if (allRes.ok) {
+                    const fallbackData = await allRes.json();
                     if (fallbackData && fallbackData.length > 0) {
-                        state.restaurants = fallbackData;
+                        state.restaurants = deduplicateRestaurantList(fallbackData);
                     }
                 }
             }

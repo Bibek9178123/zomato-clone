@@ -20,7 +20,10 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +33,7 @@ public class RestaurantService {
     private final RestaurantRepository restaurantRepository;
     private final MenuItemRepository menuItemRepository;
     private final UserRepository userRepository;
+    private final RealRestaurantService realRestaurantService;
 
     @Cacheable(value = "restaurants", key = "#id")
     public RestaurantDTO getRestaurantById(Long id) {
@@ -42,12 +46,17 @@ public class RestaurantService {
     @Cacheable(value = "menuItems", key = "#restaurantId")
     public List<MenuItemDTO> getMenuByRestaurantId(Long restaurantId) {
         log.debug("Fetching menu from DB for restaurantId: {}", restaurantId);
-        return menuItemRepository.findByRestaurantIdAndIsAvailableTrue(restaurantId)
-                .stream().map(this::mapMenuItemToDTO).toList();
+        List<MenuItem> items = menuItemRepository.findByRestaurantIdAndIsAvailableTrue(restaurantId);
+        if (items.size() < 8) {
+            realRestaurantService.enrichRestaurantMenuIfSparse(restaurantId);
+            items = menuItemRepository.findByRestaurantIdAndIsAvailableTrue(restaurantId);
+        }
+        return items.stream().map(this::mapMenuItemToDTO).toList();
     }
 
     public List<RestaurantDTO> getAllRestaurants() {
-        return restaurantRepository.findAll().stream().map(this::mapToDTO).toList();
+        realRestaurantService.purgeDuplicateRestaurantsInDatabase();
+        return deduplicateDTOList(restaurantRepository.findAll().stream().map(this::mapToDTO).toList());
     }
 
     @Transactional
@@ -104,7 +113,8 @@ public class RestaurantService {
     }
 
     public List<RestaurantDTO> getNearbyRestaurants(double lat, double lng, double radiusKm) {
-        return restaurantRepository.findRestaurantsNearby(lat, lng, radiusKm)
+        realRestaurantService.purgeDuplicateRestaurantsInDatabase();
+        List<RestaurantDTO> list = restaurantRepository.findRestaurantsNearby(lat, lng, radiusKm)
                 .stream().map(r -> {
                     RestaurantDTO dto = mapToDTO(r);
                     if (r.getLatitude() != null && r.getLongitude() != null) {
@@ -112,6 +122,23 @@ public class RestaurantService {
                     }
                     return dto;
                 }).toList();
+        return deduplicateDTOList(list);
+    }
+
+    private List<RestaurantDTO> deduplicateDTOList(List<RestaurantDTO> list) {
+        if (list == null || list.isEmpty()) return List.of();
+        Map<String, RestaurantDTO> unique = new LinkedHashMap<>();
+        for (RestaurantDTO dto : list) {
+            if (dto.getName() == null) continue;
+            String norm = RealRestaurantService.normalizeName(dto.getName());
+            if (norm.length() < 2) {
+                norm = dto.getName().toLowerCase().replaceAll("[^a-z0-9]", "");
+            }
+            if (!unique.containsKey(norm)) {
+                unique.put(norm, dto);
+            }
+        }
+        return new ArrayList<>(unique.values());
     }
 
     private double calculateDistanceKm(double lat1, double lon1, double lat2, double lon2) {
